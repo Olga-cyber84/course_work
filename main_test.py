@@ -96,7 +96,7 @@ if __name__ == '__main__':
     max_photos = vk.get_max_photo(response_info)
 
     dir_name = "avatar_vk"
-    token = "y0_AgAAAAAiqXYTAADLWwAAAADOBUkiVF9IpvSKR963QnUj16X92F_-LHE"
+    token = ""
     uploader = YaUploader(token)
     # uploader.create_dir(dir_name)
     result = uploader.upload(dir_name, max_photos)
