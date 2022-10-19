@@ -16,64 +16,68 @@ class VK:
         params = {'owner_ids': self.id, 'album_id': 'profile',
                   'extended': 1, 'photo_sizes': 1}
         response = requests.get(url, params={**self.params, **params})
-        return response.json()
+        return response
 
-    def get_maxsize_photo(self, user_avatars):
+    def get_maxsize_photo(self):
         """Метод определяет фото макимального размера, формируем список их url-адресов для выгрузки"""
-        avatars = user_avatars['response']['items']
-        data_to_file = []
-        photo_list = []
-        photo_likes_set = set()
-        photo_likes_list = []
+        user_info = self.user_info()
+        if user_info.status_code == 200:
+            avatars = user_info.json()['response']['items']
+            data_to_file = []
+            photo_list = []
+            photo_likes_set = set()
+            photo_likes_list = []
 
-        for ava in avatars:
-            photo_likes = ava['likes']['count']
-            photo_likes_set.add(photo_likes)
-            photo_likes_list.append(photo_likes)
-            photo_date = ava['date']
-            max_height = 0
-            max_width = 0
-            photo_url = ''
+            for ava in avatars:
+                photo_likes = ava['likes']['count']
+                photo_likes_set.add(photo_likes)
+                photo_likes_list.append(photo_likes)
+                photo_date = ava['date']
+                max_height = 0
+                max_width = 0
+                photo_url = ''
 
-            for photo_params in ava['sizes']:
-                if photo_params['height'] > max_height:
-                    max_height = photo_params['height']
-                    max_width = photo_params['width']
-                    photo_url = photo_params['url']
+                for photo_params in ava['sizes']:
+                    if photo_params['height'] > max_height:
+                        max_height = photo_params['height']
+                        max_width = photo_params['width']
+                        photo_url = photo_params['url']
 
-            # формируем список фото с кол-во лайков, датой и url-адресами для выгрузки
-            photo_list.append({
-                'photo_likes': photo_likes,
-                'photo_data': photo_date,
-                'photo_url': photo_url
+                # формируем список фото с кол-во лайков, датой и url-адресами для выгрузки
+                photo_list.append({
+                    'photo_likes': photo_likes,
+                    'photo_data': photo_date,
+                    'photo_url': photo_url
+                })
+            # формируем название и скачиваем файлы на комп
+            photo_name = ''
+            photo_to_ydisk = []
+            for photo in photo_list:
+                response = urllib.request.urlopen(photo['photo_url'])
+                photo_downloaded = response.read()
+                if len(photo_likes_set) == len(photo_likes_list):
+                    photo_name = f"{photo['photo_likes']}.jpg"
+                else:
+                    photo_name = f"{photo['photo_likes']}_{photo['photo_date']}.jpg"
+                with open(f"{photo_name}", 'wb') as file_object:
+                    file_object.write(photo_downloaded)
+                photo_to_ydisk.append({
+                    'photo_name': photo_name,
+                    'photo_url': photo['photo_url']
+                })
+
+            # формируем данные для файла json)
+            data_to_file.append({
+                "file_name": photo_url.split('/')[7].split('?')[0],
+                "size": max_height,
+                "height": max_height,
+                "width": max_width
             })
-        # формируем название и скачиваем файлы на комп
-        photo_name = ''
-        photo_to_ydisk = []
-        for photo in photo_list:
-            response = urllib.request.urlopen(photo['photo_url'])
-            photo_downloaded = response.read()
-            if len(photo_likes_set) == len(photo_likes_list):
-                photo_name = f"{photo['photo_likes']}.jpg"
-            else:
-                photo_name = f"{photo['photo_likes']}_{photo['photo_date']}.jpg"
-            with open(f"{photo_name}", 'wb') as file_object:
-                file_object.write(photo_downloaded)
-            photo_to_ydisk.append({
-                'photo_name': photo_name,
-                'photo_url': photo['photo_url']
-            })
-
-        # формируем данные для файла json)
-        data_to_file.append({
-            "file_name": photo_url.split('/')[7].split('?')[0],
-            "size": max_height,
-            "height": max_height,
-            "width": max_width
-        })
-        with open('photos.json', 'w') as f:
-            json.dump(data_to_file, f)
-        return photo_to_ydisk
+            with open('photos.json', 'w') as f:
+                json.dump(data_to_file, f)
+            return photo_to_ydisk
+        else:
+            print("ОШИБКА получения данных пользователя")
 
 
 class YaUploader:
@@ -83,12 +87,16 @@ class YaUploader:
         self.token = token
 
     def create_dir(self, dir_name):
-        print(dir_name)
         url = f"https://cloud-api.yandex.net/v1/disk/resources?path={dir_name}"
         headers = {'Content-Type': 'application/json',
                    'Accept': 'application/json', 'Authorization': f'OAuth {self.token}'}
         response = requests.put(url, headers=headers)
-        dir = response.json()
+        if response.status_code == 201:
+            print("Папка на Яндекс Диске создана")
+            return True
+        else:
+            print("ОШИБКА! Не создана папка на Яндекс Диске. Загрузка не удалась")
+            return False
 
     def upload(self, dir_name, photos, photos_default=5):
         """Метод загружает файл на яндекс диск"""
@@ -119,6 +127,7 @@ class YaUploader:
             with open('logging.txt', 'a') as log_f:
                 log_f.write(
                     f"{str(datetime.now()).split('.')[0]} - {message}\n")
+        # return response.json()
 
 
 if __name__ == '__main__':
@@ -131,10 +140,11 @@ if __name__ == '__main__':
 
     USER_ID = '253472352'
     vk = VK(access_vk_token, USER_ID)
-    response_info = vk.user_info()
-    max_photos = vk.get_maxsize_photo(response_info)
+    max_photos = vk.get_maxsize_photo()
 
     dir_name = f"avatar_vk_{str(datetime.now()).split('.')[0].replace(':','_')}"
     uploader = YaUploader(access_ydisk_token)
-    uploader.create_dir(dir_name)
-    result = uploader.upload(dir_name, max_photos)
+    creat_dir_res = uploader.create_dir(dir_name)
+    if creat_dir_res:
+        result = uploader.upload(dir_name, max_photos)
+        print("ЗАГРУЗКА ")
