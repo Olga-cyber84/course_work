@@ -2,6 +2,8 @@ import requests
 import json
 import urllib.request
 from datetime import datetime
+from pprint import pprint
+import sys
 
 
 class VK:
@@ -16,6 +18,7 @@ class VK:
         params = {'owner_ids': self.id, 'album_id': 'profile',
                   'extended': 1, 'photo_sizes': 1}
         response = requests.get(url, params={**self.params, **params})
+        pprint(response.json())
         return response
 
     def get_maxsize_photo(self):
@@ -25,13 +28,12 @@ class VK:
             avatars = user_info.json()['response']['items']
             data_to_file = []
             photo_list = []
-            photo_likes_set = set()
-            photo_likes_list = []
+            photo_likes_uniq = set()
+            photo_list_corr = []
 
             for ava in avatars:
                 photo_likes = ava['likes']['count']
-                photo_likes_set.add(photo_likes)
-                photo_likes_list.append(photo_likes)
+                photo_likes_uniq.add(photo_likes)
                 photo_date = ava['date']
                 max_height = 0
                 max_width = 0
@@ -44,25 +46,36 @@ class VK:
                         photo_url = photo_params['url']
 
                 # формируем список фото с кол-во лайков, датой и url-адресами для выгрузки
-                photo_list.append({
-                    'photo_likes': photo_likes,
+                one_photo = {
+                    'photo_name': photo_likes,
                     'photo_data': photo_date,
                     'photo_url': photo_url
-                })
+                }
+
+                photo_list.append(one_photo)
+            # формируем список фото с уникальыми названиями и url-адресами для выгрузки
+            if len(photo_likes_uniq) < len(photo_list):
+                for photo in photo_list:
+                    if photo['photo_name'] in photo_likes_uniq:
+                        photo_list_corr.append(
+                            {'photo_name': str(photo['photo_name']) + "_" + str(photo['photo_data']), 'photo_url': photo['photo_url']})
+                    else:
+                        photo_list_corr.append(
+                            {'photo_name': str(photo['photo_name']), 'photo_url': photo['photo_url']})
+            else:
+                photo_list_corr = photo_list
+            print(photo_list_corr)
             # формируем название и скачиваем файлы на комп
-            photo_name = ''
+
             photo_to_ydisk = []
-            for photo in photo_list:
+            for photo in photo_list_corr:
                 response = urllib.request.urlopen(photo['photo_url'])
                 photo_downloaded = response.read()
-                if len(photo_likes_set) == len(photo_likes_list):
-                    photo_name = f"{photo['photo_likes']}.jpg"
-                else:
-                    photo_name = f"{photo['photo_likes']}_{photo['photo_date']}.jpg"
-                with open(f"{photo_name}", 'wb') as file_object:
+
+                with open(f"{photo['photo_name']}", 'wb') as file_object:
                     file_object.write(photo_downloaded)
                 photo_to_ydisk.append({
-                    'photo_name': photo_name,
+                    'photo_name': photo['photo_name'],
                     'photo_url': photo['photo_url']
                 })
 
@@ -77,11 +90,13 @@ class VK:
                 json.dump(data_to_file, f)
             return photo_to_ydisk
         else:
-            print("ОШИБКА получения данных пользователя")
+            print(
+                "ОШИБКА получения данных пользователя. Обратитесь к разработчику приложения")
+            sys.exit()
 
 
 class YaUploader:
-    """Метод загружает файл на яндекс диск"""
+    """Класс загружает файл на яндекс диск"""
 
     def __init__(self, token: str):
         self.token = token
@@ -95,8 +110,9 @@ class YaUploader:
             print("Папка на Яндекс Диске создана")
             return True
         else:
-            print("ОШИБКА! Не создана папка на Яндекс Диске. Загрузка не удалась")
-            return False
+            print(
+                "ОШИБКА! Не создана папка на Яндекс Диске. Обратитесь к разработчику приложения.")
+            sys.exit()
 
     def upload(self, dir_name, photos, photos_default=5):
         """Метод загружает файл на яндекс диск"""
@@ -104,14 +120,13 @@ class YaUploader:
                    'Accept': 'application/json', 'Authorization': f'OAuth {self.token}'}
         # фиксируем кол-во фото
         if len(photos) > photos_default:
-            photos_default = photos[0:photos_default]
-        else:
-            photos_default = photos
+            photos = photos[0:photos_default]
         print(dir_name)
-        for photo in photos_default:
+        for photo in photos:
             URL = "https://cloud-api.yandex.net/v1/disk/resources"
-            response = requests.get(
-                f"{URL}/upload?path={dir_name}/{photo['photo_name']}", headers=headers)
+            params = f"{URL}/upload?path={dir_name}/{photo['photo_name']}.jpg&url={photo['photo_url']}"
+            print("params -->>> ", params)
+            response = requests.post(params, headers=headers)
             print("--> ", response.json())
             url_for_loading = response.json()["href"]
             message = ''
@@ -140,11 +155,12 @@ if __name__ == '__main__':
 
     USER_ID = '253472352'
     vk = VK(access_vk_token, USER_ID)
+    vk.user_info()
     max_photos = vk.get_maxsize_photo()
 
-    dir_name = f"avatar_vk_{str(datetime.now()).split('.')[0].replace(':','_')}"
+    dir_name = f"avatar_vk_{str(datetime.now()).split('.')[0].replace(':','_').replace(' ','_')}"
     uploader = YaUploader(access_ydisk_token)
     creat_dir_res = uploader.create_dir(dir_name)
     if creat_dir_res:
         result = uploader.upload(dir_name, max_photos)
-        print("ЗАГРУЗКА ")
+        print("ЗАГРУЗКА ЗАВЕРШЕНА")
