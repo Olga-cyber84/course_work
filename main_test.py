@@ -1,9 +1,9 @@
 import requests
 import json
-import urllib.request
 from datetime import datetime
 from pprint import pprint
 import sys
+import urllib.parse
 
 
 class VK:
@@ -18,7 +18,7 @@ class VK:
         params = {'owner_ids': self.id, 'album_id': 'profile',
                   'extended': 1, 'photo_sizes': 1}
         response = requests.get(url, params={**self.params, **params})
-        pprint(response.json())
+        # pprint(response.json())
         return response
 
     def get_maxsize_photo(self):
@@ -53,7 +53,7 @@ class VK:
                 }
 
                 photo_list.append(one_photo)
-            # формируем список фото с уникальыми названиями и url-адресами для выгрузки
+            # формируем список фото с уникальными названиями и url-адресами для выгрузки
             if len(photo_likes_uniq) < len(photo_list):
                 for photo in photo_list:
                     if photo['photo_name'] in photo_likes_uniq:
@@ -64,7 +64,7 @@ class VK:
                             {'photo_name': str(photo['photo_name']), 'photo_url': photo['photo_url']})
             else:
                 photo_list_corr = photo_list
-            print(photo_list_corr)
+            # print(photo_list_corr)
             # формируем название и скачиваем файлы на комп
 
             photo_to_ydisk = []
@@ -107,7 +107,7 @@ class YaUploader:
                    'Accept': 'application/json', 'Authorization': f'OAuth {self.token}'}
         response = requests.put(url, headers=headers)
         if response.status_code == 201:
-            print("Папка на Яндекс Диске создана")
+            # print("Папка на Яндекс Диске создана")
             return True
         else:
             print(
@@ -121,28 +121,31 @@ class YaUploader:
         # фиксируем кол-во фото
         if len(photos) > photos_default:
             photos = photos[0:photos_default]
-        print(dir_name)
+        # print(dir_name)
         for photo in photos:
             URL = "https://cloud-api.yandex.net/v1/disk/resources"
-            params = f"{URL}/upload?path={dir_name}/{photo['photo_name']}.jpg&url={photo['photo_url']}"
-            print("params -->>> ", params)
-            response = requests.post(params, headers=headers)
-            print("--> ", response.json())
-            url_for_loading = response.json()["href"]
+            path_yadisk = urllib.parse.quote(
+                f"{dir_name}/{photo['photo_name']}.jpg")
+            url_yadisk = urllib.parse.quote(f"{photo['photo_url']}")
+            query = f"{URL}/upload?path={path_yadisk}&url={url_yadisk}"
+            # print("query -->>> ", query)
+            response = requests.post(query, headers=headers)
             message = ''
+            resp_stat = response.status_code
 
-            with open(str(photo['photo_name']), 'rb') as f:
-                response = requests.put(
-                    url_for_loading, headers=headers, files={"file": f})
-                if response.status_code == 201:
+            # логирование загрузки фото
+            with open('logging.txt', 'a') as log_f:
+                if resp_stat in range(200, 203):
                     message = f"File {photo['photo_name']} downloaded successfully"
                 else:
                     message = f"File {photo['photo_name']} not downloaded"
-            # логирование загрузки фото
-            with open('logging.txt', 'a') as log_f:
                 log_f.write(
                     f"{str(datetime.now()).split('.')[0]} - {message}\n")
-        # return response.json()
+
+            if resp_stat not in range(200, 203):
+                print(
+                    "Проблемы с загрузкой файлов на Яндекс Диск. Обратитесь к разработчику приложения.")
+                sys.exit()
 
 
 if __name__ == '__main__':
@@ -163,4 +166,3 @@ if __name__ == '__main__':
     creat_dir_res = uploader.create_dir(dir_name)
     if creat_dir_res:
         result = uploader.upload(dir_name, max_photos)
-        print("ЗАГРУЗКА ЗАВЕРШЕНА")
