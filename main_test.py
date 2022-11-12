@@ -24,13 +24,13 @@ class VK:
     def get_maxsize_photo(self):
         """Метод определяет фото макимального размера, формируем список их url-адресов для выгрузки"""
         user_info = self.user_info()
-        if user_info.status_code == 200:
+        if user_info.status_code == 200 and user_info.json().get('error') is None:
             avatars = user_info.json()['response']['items']
             data_to_file = []
             photo_list = []
             photo_likes_uniq = set()
             photo_list_corr = []
-
+            pprint(avatars)
             for ava in avatars:
                 photo_likes = ava['likes']['count']
                 photo_likes_uniq.add(photo_likes)
